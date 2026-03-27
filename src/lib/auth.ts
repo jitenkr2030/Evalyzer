@@ -1,0 +1,90 @@
+import bcrypt from 'bcryptjs'
+import { NextAuthOptions } from 'next-auth'
+import CredentialsProvider from 'next-auth/providers/credentials'
+import { db } from './db'
+import { UserRole } from '@prisma/client'
+
+export const authOptions: NextAuthOptions = {
+  providers: [
+    CredentialsProvider({
+      name: 'credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' }
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          return null
+        }
+
+        const user = await db.user.findUnique({
+          where: {
+            email: credentials.email
+          },
+          include: {
+            studentProfile: true,
+            evaluatorProfile: true
+          }
+        })
+
+        if (!user || !user.isActive) {
+          return null
+        }
+
+        const isPasswordValid = await bcrypt.compare(
+          credentials.password,
+          user.password
+        )
+
+        if (!isPasswordValid) {
+          return null
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          studentProfile: user.studentProfile,
+          evaluatorProfile: user.evaluatorProfile,
+        }
+      }
+    })
+  ],
+  session: {
+    strategy: 'jwt'
+  },
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.role = user.role
+        token.studentProfile = user.studentProfile
+        token.evaluatorProfile = user.evaluatorProfile
+      }
+      return token
+    },
+    async session({ session, token }) {
+      if (token) {
+        session.user.id = token.sub!
+        session.user.email = token.email!
+        session.user.name = token.name
+        session.user.role = token.role as UserRole
+        session.user.studentProfile = token.studentProfile
+        session.user.evaluatorProfile = token.evaluatorProfile
+      }
+      return session
+    }
+  },
+  pages: {
+    signIn: '/auth/signin',
+    signUp: '/auth/signup'
+  }
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12)
+}
+
+export async function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
+  return bcrypt.compare(password, hashedPassword)
+}

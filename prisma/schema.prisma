@@ -1,0 +1,414 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  password      String
+  role          UserRole @default(STUDENT)
+  phone         String?
+  avatar        String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  studentProfile Student?
+  evaluatorProfile Evaluator?
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Student {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  rollNumber   String   @unique
+  caLevel      CALevel
+  institute    String?
+  targetExam   String?
+  preparationStage String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examEnrollments ExamEnrollment[]
+  examResults  ExamResult[]
+  answerSheets AnswerSheet[]
+  performanceAnalytics PerformanceAnalytics[]
+
+  @@map("students")
+}
+
+model Evaluator {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  employeeId   String   @unique
+  expertise    String?  // JSON string array
+  experience   Int      // years
+  qualification String?
+  maxCopiesPerDay Int   @default(10)
+  rating       Float    @default(0)
+  totalEvaluations Int  @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evaluations  Evaluation[]
+  evaluatorPayments EvaluatorPayment[]
+
+  @@map("evaluators")
+}
+
+model Exam {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  examCode     String   @unique
+  subject      Subject
+  caLevel      CALevel
+  duration     Int      // minutes
+  totalMarks   Int
+  passingMarks Int
+  scheduledAt  DateTime
+  deadline     DateTime
+  status       ExamStatus @default(DRAFT)
+  instructions String?
+  questionPaperUrl String?
+  answerKeyUrl String?
+  createdBy    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  examEnrollments ExamEnrollment[]
+  examResults   ExamResult[]
+  answerSheets  AnswerSheet[]
+  examSections  ExamSection[]
+
+  @@map("exams")
+}
+
+model ExamSection {
+  id          String   @id @default(cuid())
+  examId      String
+  title       String
+  description String?
+  marks       Int
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questions   Question[]
+
+  @@map("exam_sections")
+}
+
+model Question {
+  id          String   @id @default(cuid())
+  sectionId   String
+  questionText String
+  questionType QuestionType
+  marks       Int
+  order       Int
+  answerKey   String?
+  rubric      String?  // evaluation criteria
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  section     ExamSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  evaluationDetails EvaluationDetail[]
+
+  @@map("questions")
+}
+
+model ExamEnrollment {
+  id         String   @id @default(cuid())
+  examId     String
+  studentId  String
+  enrolledAt DateTime @default(now())
+  status     EnrollmentStatus @default(ENROLLED)
+
+  // Relations
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, studentId])
+  @@map("exam_enrollments")
+}
+
+model AnswerSheet {
+  id             String   @id @default(cuid())
+  examId         String
+  studentId      String
+  uploadedAt     DateTime @default(now())
+  fileUrl        String
+  fileName       String
+  fileSize       Int
+  qrCode         String?  // for tracking
+  status         AnswerSheetStatus @default(UPLOADED)
+  evaluationStatus EvaluationStatus @default(PENDING)
+  submittedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  exam           Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student        Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  evaluations    Evaluation[]
+  examResult     ExamResult?
+
+  @@map("answer_sheets")
+}
+
+model Evaluation {
+  id             String   @id @default(cuid())
+  answerSheetId  String
+  evaluatorId    String
+  status         EvaluationStatus @default(ASSIGNED)
+  assignedAt     DateTime @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  totalMarks     Float?
+  maxMarks       Float
+  comments       String?
+  timeSpent      Int?     // minutes
+  isModerated    Boolean  @default(false)
+  moderatedBy    String?
+  moderatedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  answerSheet    AnswerSheet @relation(fields: [answerSheetId], references: [id], onDelete: Cascade)
+  evaluator      Evaluator   @relation(fields: [evaluatorId], references: [id], onDelete: Cascade)
+  evaluationDetails EvaluationDetail[]
+
+  @@map("evaluations")
+}
+
+model EvaluationDetail {
+  id           String   @id @default(cuid())
+  evaluationId String
+  questionId   String
+  marksAwarded Float
+  maxMarks     Float
+  feedback     String?
+  highlightedAreas String? // JSON array of highlighted regions
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  question     Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([evaluationId, questionId])
+  @@map("evaluation_details")
+}
+
+model ExamResult {
+  id           String   @id @default(cuid())
+  examId       String
+  studentId    String
+  answerSheetId String   @unique
+  totalMarks   Float
+  maxMarks     Float
+  percentage   Float
+  rank         Int?
+  percentile   Float?
+  status       ResultStatus @default(PUBLISHED)
+  publishedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  exam         Exam        @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answerSheet  AnswerSheet @relation(fields: [answerSheetId], references: [id], onDelete: Cascade)
+  feedback     ResultFeedback?
+
+  @@unique([examId, studentId])
+  @@map("exam_results")
+}
+
+model ResultFeedback {
+  id           String   @id @default(cuid())
+  resultId     String   @unique
+  strengths    String?  // JSON string array
+  weaknesses   String?  // JSON string array
+  suggestions  String?  // JSON string array
+  studyPlan    String?
+  nextSteps    String?
+  aiGenerated  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  result       ExamResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  @@map("result_feedback")
+}
+
+model PerformanceAnalytics {
+  id               String   @id @default(cuid())
+  studentId        String
+  examId           String?
+  subject          Subject
+  topic            String?
+  accuracy         Float
+  avgTimePerQuestion Float?
+  improvementTrend Float?
+  strengthAreas    String?  // JSON string array
+  weakAreas        String?  // JSON string array
+  analyticsDate    DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  // Relations
+  student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("performance_analytics")
+}
+
+model EvaluatorPayment {
+  id             String   @id @default(cuid())
+  evaluatorId    String
+  evaluationId   String
+  copiesEvaluated Int
+  ratePerCopy    Float
+  totalAmount    Float
+  status         PaymentStatus @default(PENDING)
+  processedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  evaluator      Evaluator @relation(fields: [evaluatorId], references: [id], onDelete: Cascade)
+
+  @@map("evaluator_payments")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  data      String?          // JSON metadata
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// Enums
+enum UserRole {
+  STUDENT
+  EVALUATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum CALevel {
+  FOUNDATION
+  INTERMEDIATE
+  FINAL
+}
+
+enum Subject {
+  ACCOUNTING
+  LAW
+  TAXATION
+  COSTING
+  AUDIT
+  FINANCIAL_MANAGEMENT
+  ECONOMICS
+  ETHICS
+  IT_SM
+}
+
+enum ExamStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum QuestionType {
+  SHORT_ANSWER
+  LONG_ANSWER
+  PRACTICAL
+  CASE_STUDY
+  MCQ
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  WITHDRAWN
+  COMPLETED
+  EXPIRED
+}
+
+enum AnswerSheetStatus {
+  UPLOADED
+  PROCESSED
+  ASSIGNED
+  UNDER_EVALUATION
+  EVALUATED
+  REJECTED
+}
+
+enum EvaluationStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  MODERATED
+  DISPUTED
+}
+
+enum ResultStatus {
+  DRAFT
+  PUBLISHED
+  HIDDEN
+  ARCHIVED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSED
+  FAILED
+  CANCELLED
+}
+
+enum NotificationType {
+  EXAM_SCHEDULED
+  EXAM_REMINDER
+  RESULT_PUBLISHED
+  EVALUATION_ASSIGNED
+  PAYMENT_PROCESSED
+  SYSTEM_ALERT
+  FEEDBACK_AVAILABLE
+}
