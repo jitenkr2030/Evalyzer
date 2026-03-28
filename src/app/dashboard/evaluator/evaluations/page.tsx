@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AIEvaluationAssist } from '@/components/evaluation/AIEvaluationAssist'
 import { 
   Search, 
   Filter, 
@@ -23,7 +24,8 @@ import {
   User,
   Calendar,
   Target,
-  AlertCircle
+  AlertCircle,
+  Brain
 } from 'lucide-react'
 import { EvaluationStatus, AnswerSheetStatus } from '@prisma/client'
 
@@ -383,9 +385,10 @@ export default function EvaluatorEvaluationsPage() {
 
                 <CardContent>
                   <Tabs defaultValue="answer-sheet" className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-3">
+                    <TabsList className="grid w-full grid-cols-4">
                       <TabsTrigger value="answer-sheet">Answer Sheet</TabsTrigger>
                       <TabsTrigger value="questions">Questions</TabsTrigger>
+                      <TabsTrigger value="ai-assist">AI Assist</TabsTrigger>
                       <TabsTrigger value="summary">Summary</TabsTrigger>
                     </TabsList>
 
@@ -488,6 +491,77 @@ export default function EvaluatorEvaluationsPage() {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="ai-assist">
+                      <div className="space-y-6">
+                        <div className="border rounded-lg p-4 bg-blue-50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Brain className="w-5 h-5 text-blue-600" />
+                            <h4 className="font-semibold text-blue-900">AI Evaluation Assistant</h4>
+                          </div>
+                          <p className="text-sm text-blue-800">
+                            Get AI-powered insights and suggestions for more consistent evaluation
+                          </p>
+                        </div>
+
+                        {selectedEvaluation && selectedEvaluation.answerSheet.exam.examSections.length > 0 ? (
+                          <div className="space-y-6">
+                            {selectedEvaluation.answerSheet.exam.examSections.map((section, sectionIndex) => (
+                              <div key={section.id} className="border rounded-lg p-4">
+                                <h5 className="font-semibold mb-4">
+                                  Section {sectionIndex + 1}: {section.title}
+                                </h5>
+                                <div className="space-y-4">
+                                  {section.questions.map((question, questionIndex) => (
+                                    <div key={question.id} className="border-l-4 border-blue-200 pl-4">
+                                      <div className="flex items-start justify-between mb-2">
+                                        <div className="flex-1">
+                                          <p className="font-medium text-blue-600 mb-1">
+                                            Q{sectionIndex + 1}.{questionIndex + 1} ({question.marks} marks)
+                                          </p>
+                                          <p className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-2 rounded">
+                                            {question.questionText}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      
+                                      <AIEvaluationAssist
+                                        questionText={question.questionText}
+                                        answerText="Student's answer would be displayed here with the answer sheet viewer integration"
+                                        answerKey={question.answerKey}
+                                        maxMarks={question.marks}
+                                        questionType={question.questionType}
+                                        subject={selectedEvaluation.answerSheet.exam.subject}
+                                        onEvaluationComplete={(result) => {
+                                          // Auto-fill AI suggested marks
+                                          setEvaluationData(prev => ({
+                                            ...prev,
+                                            questionMarks: {
+                                              ...prev.questionMarks,
+                                              [question.id]: result.marksAwarded
+                                            }
+                                          }))
+                                        }}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <Brain className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                            <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                              AI Assistant Ready
+                            </h4>
+                            <p className="text-gray-600">
+                              Select an evaluation to use AI-powered assistance
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </TabsContent>
 
